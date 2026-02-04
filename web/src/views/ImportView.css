@@ -1,0 +1,317 @@
+/**
+ * ImportView Styles
+ *
+ * Styling for the markdown import UI with a clean, modern design
+ * matching the existing GitHub-inspired dark theme.
+ */
+
+.import-view {
+  min-height: 100vh;
+  background-color: #0d1117;
+  color: #c9d1d9;
+  padding: 2rem;
+}
+
+.import-header {
+  text-align: center;
+  margin-bottom: 2rem;
+}
+
+.import-header h1 {
+  font-size: 2.5rem;
+  color: #58a6ff;
+  margin: 0 0 0.5rem 0;
+  font-weight: 600;
+}
+
+.import-subtitle {
+  font-size: 1.1rem;
+  color: #8b949e;
+  margin: 0;
+}
+
+.import-container {
+  max-width: 1400px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+}
+
+/* Input Section */
+.import-input-section {
+  background-color: #161b22;
+  border: 1px solid #30363d;
+  border-radius: 8px;
+  padding: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.import-controls {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+.format-selector {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.format-label {
+  font-weight: 600;
+  color: #c9d1d9;
+  margin-right: 0.5rem;
+}
+
+.radio-option {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+  padding: 0.5rem 0.75rem;
+  border-radius: 4px;
+  transition: background-color 0.2s;
+}
+
+.radio-option:hover {
+  background-color: #21262d;
+}
+
+.radio-option input[type="radio"] {
+  cursor: pointer;
+  margin: 0;
+}
+
+.radio-option span {
+  color: #c9d1d9;
+  font-size: 0.95rem;
+}
+
+.action-buttons {
+  display: flex;
+  gap: 0.75rem;
+}
+
+.btn {
+  padding: 0.6rem 1.2rem;
+  border: none;
+  border-radius: 6px;
+  font-size: 0.95rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-primary {
+  background-color: #238636;
+  color: #ffffff;
+}
+
+.btn-primary:hover:not(:disabled) {
+  background-color: #2ea043;
+}
+
+.btn-primary:active:not(:disabled) {
+  background-color: #1f7a2e;
+}
+
+.btn-secondary {
+  background-color: #21262d;
+  color: #c9d1d9;
+  border: 1px solid #30363d;
+}
+
+.btn-secondary:hover:not(:disabled) {
+  background-color: #30363d;
+  border-color: #484f58;
+}
+
+.btn-secondary:active:not(:disabled) {
+  background-color: #282e36;
+}
+
+.import-textarea {
+  width: 100%;
+  min-height: 400px;
+  padding: 1rem;
+  background-color: #0d1117;
+  color: #c9d1d9;
+  border: 1px solid #30363d;
+  border-radius: 6px;
+  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+  font-size: 0.9rem;
+  line-height: 1.6;
+  resize: vertical;
+  transition: border-color 0.2s;
+}
+
+.import-textarea:focus {
+  outline: none;
+  border-color: #58a6ff;
+  box-shadow: 0 0 0 3px rgba(88, 166, 255, 0.1);
+}
+
+.import-textarea:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.import-textarea::placeholder {
+  color: #6e7681;
+}
+
+/* Error Message */
+.error-message {
+  background-color: #3d1e1e;
+  border: 1px solid #f85149;
+  border-radius: 6px;
+  padding: 1rem;
+  color: #f85149;
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+}
+
+.error-message strong {
+  color: #ff7b72;
+}
+
+/* Output Section */
+.import-output-section {
+  background-color: #161b22;
+  border: 1px solid #30363d;
+  border-radius: 8px;
+  padding: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.output-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin-bottom: 0.5rem;
+}
+
+.output-header h2 {
+  font-size: 1.5rem;
+  color: #c9d1d9;
+  margin: 0;
+  font-weight: 600;
+}
+
+.graph-stats {
+  display: flex;
+  gap: 1.5rem;
+  font-size: 0.9rem;
+}
+
+.graph-stats .stat {
+  color: #8b949e;
+}
+
+.graph-stats .stat strong {
+  color: #58a6ff;
+  font-weight: 600;
+}
+
+.flowchart-container {
+  width: 100%;
+  height: 600px;
+  background-color: #0d1117;
+  border: 1px solid #30363d;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+/* Loading Indicator */
+.loading-indicator {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 3rem;
+  gap: 1rem;
+}
+
+.loading-indicator p {
+  color: #8b949e;
+  font-size: 1rem;
+  margin: 0;
+}
+
+.spinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid #30363d;
+  border-top-color: #58a6ff;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .import-view {
+    padding: 1rem;
+  }
+
+  .import-header h1 {
+    font-size: 2rem;
+  }
+
+  .import-subtitle {
+    font-size: 1rem;
+  }
+
+  .import-controls {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .action-buttons {
+    width: 100%;
+    flex-wrap: wrap;
+  }
+
+  .action-buttons .btn {
+    flex: 1;
+    min-width: 120px;
+  }
+
+  .import-textarea {
+    min-height: 300px;
+    font-size: 0.85rem;
+  }
+
+  .flowchart-container {
+    height: 400px;
+  }
+
+  .output-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}
