@@ -7,7 +7,7 @@ FastAPI backend for converting markdown/mermaid playbooks to visual IR flowchart
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from api.routers import playbooks
+from api.routers import playbooks, parse
 
 app = FastAPI(
     title="Playbook Forge API",
@@ -26,6 +26,7 @@ app.add_middleware(
 
 # Register routers
 app.include_router(playbooks.router, prefix="/api/playbooks", tags=["playbooks"])
+app.include_router(parse.router, prefix="/api", tags=["parse"])
 
 
 @app.get("/")

@@ -4,7 +4,7 @@ Data Models for Playbook Forge API
 Defines Pydantic models for request/response validation and type safety.
 """
 
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Literal
 from pydantic import BaseModel, Field
 
 
@@ -41,6 +41,31 @@ class PlaybookResponse(BaseModel):
     graph: PlaybookGraph = Field(..., description="Parsed flowchart graph")
     metadata: Optional[Dict[str, Any]] = Field(default=None, description="Parsing metadata")
     errors: List[str] = Field(default_factory=list, description="Parsing errors or warnings")
+
+
+class ParseRequest(BaseModel):
+    """Request model for POST /api/parse endpoint."""
+    content: str = Field(..., description="Markdown or mermaid text to parse", min_length=1)
+    format: Optional[Literal['markdown', 'mermaid']] = Field(
+        default=None,
+        description="Input format (markdown or mermaid). Auto-detects if not specified."
+    )
+
+
+class ParseMetadata(BaseModel):
+    """Metadata about the parsing operation."""
+    title: Optional[str] = Field(default=None, description="Extracted title from content")
+    description: Optional[str] = Field(default=None, description="Extracted description")
+    format: str = Field(..., description="Detected or specified format")
+    node_count: int = Field(..., description="Number of nodes in the graph")
+    edge_count: int = Field(..., description="Number of edges in the graph")
+
+
+class ParseResponse(BaseModel):
+    """Response model for POST /api/parse endpoint."""
+    nodes: List[PlaybookNode] = Field(..., description="List of flowchart nodes")
+    edges: List[PlaybookEdge] = Field(..., description="List of flowchart edges")
+    metadata: ParseMetadata = Field(..., description="Parsing metadata")
 
 
 class ErrorResponse(BaseModel):
