@@ -56,7 +56,7 @@ build: build-api build-web
 # Validate backend (no build step needed for Python)
 build-api:
 	@echo "Validating backend code..."
-	python -m py_compile api/main.py api/models.py api/routers/playbooks.py
+	python -m py_compile api/main.py api/models.py api/routers/playbooks.py api/parsers/markdown_parser.py
 	@echo "Backend validation complete!"
 
 # Build frontend production bundle
@@ -78,7 +78,10 @@ clean:
 
 # Run tests
 test:
-	@echo "Running tests..."
-	@echo "Note: Test suite not yet implemented"
-	@echo "TODO: Add pytest for backend tests"
-	@echo "TODO: Add Jest for frontend tests"
+	@echo "Running backend tests..."
+	python3 -m pytest api/tests/ -v
+	@echo ""
+	@echo "Running manual test suite..."
+	python3 api/tests/run_parser_tests.py
+	@echo ""
+	@echo "All tests complete!"

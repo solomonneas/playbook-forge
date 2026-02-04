@@ -11,3 +11,6 @@ pydantic==2.5.3
 
 # Markdown processing
 python-markdown==3.5.2
+
+# Testing
+pytest==7.4.3
