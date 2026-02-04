@@ -1,0 +1,13 @@
+# Playbook Forge API Dependencies
+
+# FastAPI framework
+fastapi==0.109.0
+
+# ASGI server
+uvicorn[standard]==0.27.0
+
+# Data validation
+pydantic==2.5.3
+
+# Markdown processing
+python-markdown==3.5.2
