@@ -56,7 +56,7 @@ build: build-api build-web
 # Validate backend (no build step needed for Python)
 build-api:
 	@echo "Validating backend code..."
-	python -m py_compile api/main.py api/models.py api/routers/playbooks.py api/parsers/markdown_parser.py
+	python -m py_compile api/main.py api/models.py api/routers/playbooks.py api/parsers/markdown_parser.py api/parsers/mermaid_parser.py
 	@echo "Backend validation complete!"
 
 # Build frontend production bundle
