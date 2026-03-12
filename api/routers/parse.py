@@ -5,11 +5,12 @@ Handles the POST /api/parse endpoint for converting markdown/mermaid text to flo
 """
 
 import re
-import sys
 from typing import Optional
-from fastapi import APIRouter, HTTPException, Request
+
+from fastapi import APIRouter, HTTPException
 from fastapi.responses import JSONResponse
-from api.models import ParseRequest, ParseResponse, ParseMetadata, PlaybookNode, PlaybookEdge
+
+from api.models import ParseRequest, ParseResponse, ParseMetadata
 from api.parsers.markdown_parser import MarkdownParser
 from api.parsers.mermaid_parser import MermaidParser
 
