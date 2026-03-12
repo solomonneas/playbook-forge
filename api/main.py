@@ -4,13 +4,26 @@ Playbook Forge API - Main Application Entry Point
 FastAPI backend for converting markdown/mermaid playbooks to visual IR flowcharts.
 """
 
+import logging
+import sys
+from pathlib import Path
+
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
+from api.auth import initialize_api_key
+from api.crypto import get_cipher
 from api.database import init_db
 from api.seed import seed_db
 from api.routers import export, integrations, parse, playbooks
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 app = FastAPI(
     title="Playbook Forge API",
@@ -39,6 +52,8 @@ app.include_router(integrations.router, prefix="/api", tags=["integrations"])
 
 @app.on_event("startup")
 def startup_event():
+    initialize_api_key()
+    get_cipher()
     init_db()
     seed_db()
 
@@ -46,11 +61,12 @@ def startup_event():
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
     """Global exception handler returning structured JSON errors."""
+    logger.exception("Unhandled exception during request %s %s", request.method, request.url.path, exc_info=exc)
     return JSONResponse(
         status_code=500,
         content={
             "error": "Internal server error",
-            "detail": str(exc)
+            "detail": "Internal server error"
         }
     )
 
