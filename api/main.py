@@ -6,6 +6,7 @@ FastAPI backend for converting markdown/mermaid playbooks to visual IR flowchart
 
 import logging
 import sys
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -25,10 +26,21 @@ from api.routers import export, integrations, parse, playbooks
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    initialize_api_key()
+    get_cipher()
+    init_db()
+    seed_db()
+    yield
+
+
 app = FastAPI(
     title="Playbook Forge API",
     description="Convert markdown/mermaid playbooks to visual IR flowcharts",
-    version="0.1.0"
+    version="0.1.0",
+    lifespan=lifespan,
 )
 
 # CORS middleware for React frontend
@@ -48,14 +60,6 @@ app.include_router(parse.router, prefix="/api", tags=["parse"])
 app.include_router(playbooks.router, prefix="/api", tags=["playbooks"])
 app.include_router(export.router, prefix="/api", tags=["export"])
 app.include_router(integrations.router, prefix="/api", tags=["integrations"])
-
-
-@app.on_event("startup")
-def startup_event():
-    initialize_api_key()
-    get_cipher()
-    init_db()
-    seed_db()
 
 
 @app.exception_handler(Exception)

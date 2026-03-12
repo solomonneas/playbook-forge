@@ -4,6 +4,7 @@ Parse Router
 Handles the POST /api/parse endpoint for converting markdown/mermaid text to flowchart JSON.
 """
 
+import logging
 import re
 from typing import Optional
 
@@ -13,6 +14,8 @@ from fastapi.responses import JSONResponse
 from api.models import ParseRequest, ParseResponse, ParseMetadata
 from api.parsers.markdown_parser import MarkdownParser
 from api.parsers.mermaid_parser import MermaidParser
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -217,14 +220,13 @@ async def parse_content(request: ParseRequest):
 
     except HTTPException:
         raise
-    except Exception as e:
-        # Return structured error response instead of raw exception trace
-        error_message = str(e)
+    except Exception as exc:
+        logger.exception("Failed to parse content", exc_info=exc)
         return JSONResponse(
             status_code=400,
             content={
                 "error": "Parse failed",
-                "detail": f"Failed to parse content: {error_message}"
+                "detail": "Failed to parse content. Check server logs for more information."
             }
         )
 

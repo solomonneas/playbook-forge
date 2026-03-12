@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
+import logging
 import os
+import stat
 from pathlib import Path
 
 from cryptography.fernet import Fernet, InvalidToken
 
-_KEY_FILE = Path(__file__).parent / ".encryption_key"
+logger = logging.getLogger(__name__)
+
+_KEY_FILE = Path(os.getenv("PLAYBOOK_FORGE_KEY_PATH", str(Path.home() / ".encryption_key")))
 _CIPHER: Fernet | None = None
 
 
@@ -20,8 +24,9 @@ def _load_encryption_key() -> bytes:
         return _KEY_FILE.read_text(encoding="utf-8").strip().encode("utf-8")
 
     key = Fernet.generate_key()
+    _KEY_FILE.parent.mkdir(parents=True, exist_ok=True)
     _KEY_FILE.write_text(key.decode("utf-8"), encoding="utf-8")
-    print(f"[playbook-forge] Generated encryption key at {_KEY_FILE}")
+    os.chmod(_KEY_FILE, stat.S_IRUSR | stat.S_IWUSR)
     return key
 
 
@@ -43,5 +48,6 @@ def decrypt_secret(value: str | None) -> str | None:
         return value
     try:
         return get_cipher().decrypt(value.encode("utf-8")).decode("utf-8")
-    except (InvalidToken, ValueError, TypeError):
-        return value
+    except (InvalidToken, ValueError, TypeError) as exc:
+        logger.error("Failed to decrypt secret", exc_info=exc)
+        return None
