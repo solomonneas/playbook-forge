@@ -65,6 +65,16 @@ curl -X POST https://hotwash.example/api/ingest/mappings \
 Patterns are CSV-of-exacts (case-insensitive). `null` or empty means wildcard.
 Highest specificity wins, ties broken by oldest `created_at` then smallest `id`.
 
+## Payload shape
+
+Hotwash reads the nested `rule.{id, level, description, groups}` and
+`agent.{id, name}` fields, which is what Wazuh's `<integration>` block
+POSTs natively. Pattern matching is keyed on those nested values. The
+Wazuh management API and tools like `wazuh-mcp` return a flattened
+envelope (`rule_id`, `agent_id`, `rule_groups` at top level) for query
+results; if you smoke-test from those, translate to the nested shape
+first or no mapping will match.
+
 ## Trigger modes
 
 - `auto`: starts an `Execution` immediately. Alert exposed at
