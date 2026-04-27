@@ -7,6 +7,7 @@ import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react'
 import { useHashRouter } from '../router';
 import { API_BASE_URL } from '../api/client';
 import { useExecutionSocket } from '../hooks/useExecutionSocket';
+import { relativeTime } from '../lib/time';
 
 interface Step {
   node_id: string;
@@ -70,14 +71,6 @@ const EVENT_COLORS: Record<string, string> = {
   execution_paused: '#eab308',
   execution_completed: '#3b82f6',
 };
-
-function relativeTime(dateStr: string): string {
-  const diff = Date.now() - new Date(dateStr).getTime();
-  if (diff < 60000) return 'just now';
-  if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`;
-  if (diff < 86400000) return `${Math.floor(diff / 3600000)}h ago`;
-  return `${Math.floor(diff / 86400000)}d ago`;
-}
 
 function formatDuration(ms: number): string {
   if (ms < 60000) return `${Math.round(ms / 1000)}s`;
