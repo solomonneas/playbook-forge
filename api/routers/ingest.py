@@ -1,7 +1,7 @@
 """
 Wazuh ingest router.
 
-Two router instances mounted under /api/ingest:
+Three router instances mounted under /api/ingest:
 
 - `webhook_router`: POST /api/ingest/wazuh, HMAC-authenticated. No global
   X-API-Key dep so Wazuh's integration script can call it without setting
@@ -9,32 +9,46 @@ Two router instances mounted under /api/ingest:
 
 - `mappings_router`: CRUD on /api/ingest/mappings/*, gated by X-API-Key like
   the rest of the dashboard surface.
+
+- `suggestions_router`: list / get / accept / dismiss for IngestSuggestion
+  rows produced by `mode=suggest` mappings. Also gated by X-API-Key.
 """
 
 from __future__ import annotations
 
 import json
 import logging
-from typing import List
+from typing import List, Optional
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, status
 from pydantic import ValidationError
+from sqlalchemy import desc
 from sqlalchemy.orm import Session
 
 from api.auth import get_api_key
 from api.crypto import encrypt_secret
 from api.database import get_db
-from api.orm_models import Playbook, WazuhMapping
+from api.orm_models import IngestSuggestion, Playbook, WazuhMapping
 from api.schemas import (
+    ExecutionSummary,
     IngestResponse,
     MappingCreate,
     MappingOut,
     MappingUpdate,
+    SuggestionAcceptResponse,
+    SuggestionDetail,
+    SuggestionDismiss,
+    SuggestionOut,
     WazuhAlertIngest,
 )
+from api.services.executions import load_steps, step_progress
 from api.services.ingest import (
     VALID_MODES,
+    SuggestionStateError,
+    accept_suggestion,
+    dismiss_suggestion,
     load_mapping,
+    load_suggestion,
     mapping_secret,
     parse_signature_header,
     process_alert,
@@ -50,6 +64,9 @@ MAX_INGEST_BODY_BYTES = 256 * 1024
 
 webhook_router = APIRouter()
 mappings_router = APIRouter(dependencies=[Depends(get_api_key)])
+suggestions_router = APIRouter(dependencies=[Depends(get_api_key)])
+
+VALID_SUGGESTION_STATES = {"pending", "accepted", "dismissed"}
 
 
 def _serialize_mapping(mapping: WazuhMapping) -> MappingOut:
@@ -267,3 +284,154 @@ def delete_mapping(mapping_id: int, db: Session = Depends(get_db)):
     db.delete(mapping)
     db.commit()
     return None
+
+
+# --- Suggestions ---
+
+
+def _serialize_suggestion_row(suggestion: IngestSuggestion) -> SuggestionOut:
+    return SuggestionOut(
+        id=suggestion.id,
+        mapping_id=suggestion.mapping_id,
+        playbook_id=suggestion.playbook_id,
+        state=suggestion.state,
+        fingerprint=suggestion.fingerprint,
+        rule_id=suggestion.rule_id,
+        agent_id=suggestion.agent_id,
+        agent_name=suggestion.agent_name,
+        description=suggestion.description,
+        accepted_execution_id=suggestion.accepted_execution_id,
+        created_at=suggestion.created_at,
+        resolved_at=suggestion.resolved_at,
+    )
+
+
+def _serialize_suggestion_detail(suggestion: IngestSuggestion) -> SuggestionDetail:
+    if suggestion.alert_payload_json:
+        try:
+            alert_payload = json.loads(suggestion.alert_payload_json)
+        except json.JSONDecodeError:
+            logger.warning(
+                "Suggestion %s has corrupt alert_payload_json; returning empty payload",
+                suggestion.id,
+            )
+            alert_payload = {}
+        if not isinstance(alert_payload, dict):
+            alert_payload = {}
+    else:
+        alert_payload = {}
+
+    mapping = suggestion.mapping
+    if mapping is None:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Suggestion {suggestion.id} references a deleted mapping",
+        )
+
+    playbook_title = suggestion.playbook.title if suggestion.playbook else None
+
+    return SuggestionDetail(
+        id=suggestion.id,
+        mapping_id=suggestion.mapping_id,
+        playbook_id=suggestion.playbook_id,
+        state=suggestion.state,
+        fingerprint=suggestion.fingerprint,
+        rule_id=suggestion.rule_id,
+        agent_id=suggestion.agent_id,
+        agent_name=suggestion.agent_name,
+        description=suggestion.description,
+        accepted_execution_id=suggestion.accepted_execution_id,
+        created_at=suggestion.created_at,
+        resolved_at=suggestion.resolved_at,
+        alert_payload=alert_payload,
+        mapping=_serialize_mapping(mapping),
+        playbook_title=playbook_title,
+    )
+
+
+def _execution_summary(execution) -> ExecutionSummary:
+    steps = load_steps(execution)
+    total, completed = step_progress(steps)
+    playbook_title = execution.playbook.title if execution.playbook else None
+    return ExecutionSummary(
+        id=execution.id,
+        playbook_id=execution.playbook_id,
+        playbook_title=playbook_title,
+        incident_title=execution.incident_title,
+        incident_id=execution.incident_id,
+        status=execution.status,
+        started_by=execution.started_by,
+        started_at=execution.started_at,
+        completed_at=execution.completed_at,
+        steps_total=total,
+        steps_completed=completed,
+    )
+
+
+@suggestions_router.get("/ingest/suggestions", response_model=List[SuggestionOut])
+def list_suggestions(
+    db: Session = Depends(get_db),
+    state_filter: str = Query(default="pending", alias="state"),
+    mapping_id: Optional[int] = Query(default=None),
+    limit: int = Query(default=100, ge=1, le=500),
+):
+    if state_filter not in VALID_SUGGESTION_STATES:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Invalid state '{state_filter}'. "
+                f"Must be one of: {sorted(VALID_SUGGESTION_STATES)}"
+            ),
+        )
+    query = db.query(IngestSuggestion).filter(IngestSuggestion.state == state_filter)
+    if mapping_id is not None:
+        query = query.filter(IngestSuggestion.mapping_id == mapping_id)
+    rows = query.order_by(desc(IngestSuggestion.created_at)).limit(limit).all()
+    return [_serialize_suggestion_row(row) for row in rows]
+
+
+@suggestions_router.get(
+    "/ingest/suggestions/{suggestion_id}",
+    response_model=SuggestionDetail,
+)
+def get_suggestion(suggestion_id: int, db: Session = Depends(get_db)):
+    suggestion = load_suggestion(db, suggestion_id)
+    if suggestion is None:
+        raise HTTPException(status_code=404, detail="Suggestion not found")
+    return _serialize_suggestion_detail(suggestion)
+
+
+@suggestions_router.post(
+    "/ingest/suggestions/{suggestion_id}/accept",
+    response_model=SuggestionAcceptResponse,
+)
+def accept_suggestion_route(suggestion_id: int, db: Session = Depends(get_db)):
+    try:
+        execution, already_accepted = accept_suggestion(db, suggestion_id)
+    except LookupError:
+        raise HTTPException(status_code=404, detail="Suggestion not found")
+    except SuggestionStateError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+    return SuggestionAcceptResponse(
+        execution=_execution_summary(execution),
+        already_accepted=already_accepted,
+    )
+
+
+@suggestions_router.post(
+    "/ingest/suggestions/{suggestion_id}/dismiss",
+    response_model=SuggestionOut,
+)
+def dismiss_suggestion_route(
+    suggestion_id: int,
+    payload: Optional[SuggestionDismiss] = None,
+    db: Session = Depends(get_db),
+):
+    reason = payload.reason if payload else None
+    try:
+        suggestion = dismiss_suggestion(db, suggestion_id, reason)
+    except LookupError:
+        raise HTTPException(status_code=404, detail="Suggestion not found")
+    except SuggestionStateError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+    return _serialize_suggestion_row(suggestion)
