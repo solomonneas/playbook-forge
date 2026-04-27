@@ -6,7 +6,7 @@
  * /executions/:id so the patterns stay parallel.
  */
 
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useHashRouter } from '../router';
 import {
   acceptSuggestion,
@@ -55,14 +55,45 @@ const SuggestionDetailPage: React.FC<SuggestionDetailPageProps> = ({ suggestionI
   const [actioning, setActioning] = useState(false);
   const [copyState, setCopyState] = useState<'idle' | 'copied' | 'failed'>('idle');
 
+  // Stale-response guard for the detail fetch.
+  const cancelledRef = useRef(false);
+
+  // Track outstanding timers so we can clear them on unmount.
+  const timeoutsRef = useRef<Set<number>>(new Set());
+  const scheduleTimeout = useCallback((fn: () => void, ms: number) => {
+    const id = window.setTimeout(() => {
+      timeoutsRef.current.delete(id);
+      fn();
+    }, ms);
+    timeoutsRef.current.add(id);
+    return id;
+  }, []);
+
+  // Modal focus management refs.
+  const acceptOpenerRef = useRef<HTMLButtonElement | null>(null);
+  const dismissOpenerRef = useRef<HTMLButtonElement | null>(null);
+  const acceptCancelRef = useRef<HTMLButtonElement | null>(null);
+  const dismissTextareaRef = useRef<HTMLTextAreaElement | null>(null);
+
+  // Clear any pending timers on unmount.
+  useEffect(() => {
+    return () => {
+      timeoutsRef.current.forEach((id) => window.clearTimeout(id));
+      timeoutsRef.current.clear();
+    };
+  }, []);
+
   const fetchDetail = useCallback(async () => {
+    if (cancelledRef.current) return;
     setError(null);
     try {
       const result = await getSuggestion(suggestionId);
+      if (cancelledRef.current) return;
       setDetail(result);
       setGone(false);
       setNotFound(false);
     } catch (err) {
+      if (cancelledRef.current) return;
       if (err instanceof ApiClientError) {
         if (err.status === 410) {
           setDetail(null);
@@ -79,14 +110,41 @@ const SuggestionDetailPage: React.FC<SuggestionDetailPageProps> = ({ suggestionI
         setError('Failed to load suggestion.');
       }
     } finally {
-      setLoading(false);
+      if (!cancelledRef.current) setLoading(false);
     }
   }, [suggestionId]);
 
   useEffect(() => {
+    cancelledRef.current = false;
     setLoading(true);
     fetchDetail();
+    return () => {
+      cancelledRef.current = true;
+    };
   }, [fetchDetail]);
+
+  // Focus management when modals open / close.
+  useEffect(() => {
+    if (acceptOpen) {
+      acceptCancelRef.current?.focus();
+    } else if (acceptOpenerRef.current) {
+      acceptOpenerRef.current.focus();
+    }
+  }, [acceptOpen]);
+
+  useEffect(() => {
+    if (dismissOpen) {
+      dismissTextareaRef.current?.focus();
+    } else if (dismissOpenerRef.current) {
+      dismissOpenerRef.current.focus();
+    }
+  }, [dismissOpen]);
+
+  const closeAcceptModal = useCallback(() => setAcceptOpen(false), []);
+  const closeDismissModal = useCallback(() => {
+    setDismissOpen(false);
+    setDismissReason('');
+  }, []);
 
   const handleAcceptConfirm = async () => {
     if (!detail) return;
@@ -98,7 +156,7 @@ const SuggestionDetailPage: React.FC<SuggestionDetailPageProps> = ({ suggestionI
       setAcceptOpen(false);
       if (res.already_accepted) {
         setInfo('This suggestion was already accepted; routing to the existing execution.');
-        window.setTimeout(() => {
+        scheduleTimeout(() => {
           navigate(`#/executions/${res.execution.id}`);
         }, 800);
         return;
@@ -138,10 +196,10 @@ const SuggestionDetailPage: React.FC<SuggestionDetailPageProps> = ({ suggestionI
       const text = JSON.stringify(detail.alert_payload, null, 2);
       await navigator.clipboard.writeText(text);
       setCopyState('copied');
-      window.setTimeout(() => setCopyState('idle'), 1500);
+      scheduleTimeout(() => setCopyState('idle'), 1500);
     } catch {
       setCopyState('failed');
-      window.setTimeout(() => setCopyState('idle'), 1500);
+      scheduleTimeout(() => setCopyState('idle'), 1500);
     }
   };
 
@@ -329,6 +387,7 @@ const SuggestionDetailPage: React.FC<SuggestionDetailPageProps> = ({ suggestionI
         {isPending && (
           <div className="flex gap-3 mt-6">
             <button
+              ref={acceptOpenerRef}
               className="px-4 py-2 rounded-md bg-blue-600 text-sm text-white hover:bg-blue-500 disabled:opacity-60 focus:outline-none focus:ring-2 focus:ring-blue-500"
               onClick={() => setAcceptOpen(true)}
               disabled={actioning}
@@ -336,6 +395,7 @@ const SuggestionDetailPage: React.FC<SuggestionDetailPageProps> = ({ suggestionI
               Accept
             </button>
             <button
+              ref={dismissOpenerRef}
               className="px-4 py-2 rounded-md border border-slate-700 bg-slate-800 text-sm text-slate-200 hover:bg-slate-700 disabled:opacity-60 focus:outline-none focus:ring-2 focus:ring-blue-500"
               onClick={() => setDismissOpen(true)}
               disabled={actioning}
@@ -364,16 +424,31 @@ const SuggestionDetailPage: React.FC<SuggestionDetailPageProps> = ({ suggestionI
 
       {/* Accept confirm modal */}
       {acceptOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="accept-modal-title"
+          tabIndex={-1}
+          onKeyDown={(e) => {
+            if (e.key === 'Escape' && !actioning) {
+              e.stopPropagation();
+              closeAcceptModal();
+            }
+          }}
+        >
           <div className="w-full max-w-md rounded-lg border border-slate-700 bg-slate-900 p-6">
-            <h2 className="text-lg font-semibold text-slate-100 mb-3">Accept suggestion?</h2>
+            <h2 id="accept-modal-title" className="text-lg font-semibold text-slate-100 mb-3">
+              Accept suggestion?
+            </h2>
             <p className="text-sm text-slate-400">
               An execution will be created from <span className="text-slate-200">{playbookTitle}</span>.
             </p>
             <div className="mt-6 flex justify-end gap-3">
               <button
+                ref={acceptCancelRef}
                 className="px-4 py-2 rounded-md border border-slate-700 bg-slate-800 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                onClick={() => setAcceptOpen(false)}
+                onClick={closeAcceptModal}
                 disabled={actioning}
               >
                 Cancel
@@ -392,9 +467,23 @@ const SuggestionDetailPage: React.FC<SuggestionDetailPageProps> = ({ suggestionI
 
       {/* Dismiss confirm modal */}
       {dismissOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="dismiss-modal-title"
+          tabIndex={-1}
+          onKeyDown={(e) => {
+            if (e.key === 'Escape' && !actioning) {
+              e.stopPropagation();
+              closeDismissModal();
+            }
+          }}
+        >
           <div className="w-full max-w-md rounded-lg border border-slate-700 bg-slate-900 p-6">
-            <h2 className="text-lg font-semibold text-slate-100 mb-3">Dismiss suggestion?</h2>
+            <h2 id="dismiss-modal-title" className="text-lg font-semibold text-slate-100 mb-3">
+              Dismiss suggestion?
+            </h2>
             <p className="text-sm text-slate-400 mb-4">
               Dismissing anchors the cooldown window for this fingerprint, suppressing immediate re-fires of the same alert.
             </p>
@@ -402,6 +491,7 @@ const SuggestionDetailPage: React.FC<SuggestionDetailPageProps> = ({ suggestionI
               Reason (optional)
             </label>
             <textarea
+              ref={dismissTextareaRef}
               id="dismiss-reason"
               className="w-full rounded-md bg-slate-800 border border-slate-700 px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
               placeholder="Why is this being dismissed?"
@@ -416,10 +506,7 @@ const SuggestionDetailPage: React.FC<SuggestionDetailPageProps> = ({ suggestionI
             <div className="mt-6 flex justify-end gap-3">
               <button
                 className="px-4 py-2 rounded-md border border-slate-700 bg-slate-800 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                onClick={() => {
-                  setDismissOpen(false);
-                  setDismissReason('');
-                }}
+                onClick={closeDismissModal}
                 disabled={actioning}
               >
                 Cancel

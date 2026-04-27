@@ -91,7 +91,11 @@ const SuggestionsPage: React.FC = () => {
     writeFiltersToHash({ state: stateFilter, mappingId: mappingIdInput });
   }, [stateFilter, mappingIdInput]);
 
+  // Ref-tracked cancellation flag so the polling effect can also guard writes.
+  const cancelledRef = useRef(false);
+
   const fetchSuggestions = useCallback(async () => {
+    if (cancelledRef.current) return;
     setError(null);
     try {
       const mappingIdNum = mappingIdInput.trim()
@@ -110,10 +114,12 @@ const SuggestionsPage: React.FC = () => {
           })
         )
       );
+      if (cancelledRef.current) return;
       const merged = ([] as ApiSuggestionSummary[]).concat(...results);
       merged.sort((a, b) => (a.created_at < b.created_at ? 1 : -1));
       setSuggestions(merged);
     } catch (err) {
+      if (cancelledRef.current) return;
       const msg =
         err instanceof ApiClientError
           ? err.message
@@ -121,14 +127,18 @@ const SuggestionsPage: React.FC = () => {
       setError(msg);
       setSuggestions([]);
     } finally {
-      setLoading(false);
+      if (!cancelledRef.current) setLoading(false);
     }
   }, [stateFilter, mappingIdInput]);
 
-  // Initial + filter-change fetch.
+  // Initial + filter-change fetch with stale-response guard.
   useEffect(() => {
+    cancelledRef.current = false;
     setLoading(true);
     fetchSuggestions();
+    return () => {
+      cancelledRef.current = true;
+    };
   }, [fetchSuggestions]);
 
   // Polling: only on pending tab while document visible.
@@ -231,7 +241,7 @@ const SuggestionsPage: React.FC = () => {
         </div>
 
         <div className="flex flex-wrap items-center gap-3 mb-6">
-          <div className="flex flex-wrap gap-2" role="tablist" aria-label="State filters">
+          <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="Filter by state">
             {STATE_FILTERS.map((f) => {
               const active = stateFilter === f;
               const label =
@@ -241,8 +251,8 @@ const SuggestionsPage: React.FC = () => {
               return (
                 <button
                   key={f}
-                  role="tab"
-                  aria-selected={active}
+                  role="radio"
+                  aria-checked={active}
                   className={`px-3 py-1 rounded-full text-xs border capitalize focus:outline-none focus:ring-2 focus:ring-blue-500 ${
                     active
                       ? 'bg-blue-600 border-blue-500 text-white'
@@ -290,7 +300,7 @@ const SuggestionsPage: React.FC = () => {
           >
             Loading suggestions...
           </div>
-        ) : suggestions.length === 0 ? (
+        ) : !error && suggestions.length === 0 ? (
           <div
             className="rounded-lg border border-dashed border-slate-800 p-10 text-center text-slate-500"
             role="status"
@@ -299,7 +309,7 @@ const SuggestionsPage: React.FC = () => {
               ? 'No pending suggestions. Configure mappings in Integrations or read about the integration setup in WAZUH-INGEST.md.'
               : `No ${stateFilter === 'all' ? '' : stateFilter + ' '}suggestions match these filters.`}
           </div>
-        ) : (
+        ) : suggestions.length === 0 ? null : (
           <div className="flex flex-col gap-3">
             {suggestions.map((s) => {
               const isPending = s.state === 'pending';
@@ -362,10 +372,25 @@ const SuggestionsPage: React.FC = () => {
                           >
                             Dismiss
                           </button>
+                          <button
+                            className="px-3 py-1 rounded-md border border-slate-700 bg-slate-900 text-xs text-slate-300 hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            aria-label={`View suggestion ${s.id} (${
+                              s.rule_id ? `rule ${s.rule_id}` : 'no rule id'
+                            }, ${s.agent_name || s.agent_id || 'unknown agent'})`}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              navigate(`#/suggestions/${s.id}`);
+                            }}
+                          >
+                            View
+                          </button>
                         </>
                       ) : (
                         <button
                           className="px-3 py-1 rounded-md border border-slate-700 bg-slate-800 text-xs text-slate-200 hover:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          aria-label={`View suggestion ${s.id} (${
+                            s.rule_id ? `rule ${s.rule_id}` : 'no rule id'
+                          }, ${s.agent_name || s.agent_id || 'unknown agent'})`}
                           onClick={(e) => {
                             e.stopPropagation();
                             navigate(`#/suggestions/${s.id}`);
